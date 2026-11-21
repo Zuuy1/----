@@ -1,0 +1,32 @@
+# 虚拟环境（绝对路径，不可迁移，绝不入库）
+.venv/
+.venv.*/
+venv/
+env/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 数据：体积大、二进制、无法 diff
+data/
+data(11_6try)/
+downloads/
+*.parquet
+*.pkl
+*.h5
+
+# 运行产物
+output/
+
+# 第三方源码，不是自己写的
+backtrader-master/
+backtesting.py/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

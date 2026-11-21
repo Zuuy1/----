@@ -1,0 +1,106 @@
+量化回测项目：代码问答
+整理日期：2026-11-07
+
+1. 问：VS Code 运行报 ModuleNotFoundError: No module named 'baostock'，怎么办？
+答：通常是运行了解释器之外的 Python。先执行 python -c "import sys; print(sys.executable)"，必须指向 D:\回测项目\.venv\Scripts\python.exe。
+
+2. 问：Select Interpreter 找不到项目环境怎么办？
+答：确认 VS Code 打开的是 D:\回测项目，然后手动选择 Enter interpreter path，指定 .venv\Scripts\python.exe；必要时重新加载窗口。
+
+3. 问：为什么 adjustflag 要使用 "2"？
+答："2" 表示前复权；"3" 表示不复权。因子和收益计算应统一使用前复权价格，避免除权除息产生假跳变。
+
+4. 问：Parquet 是什么？
+答：一种适合数据分析的压缩二进制格式，能保存字段类型，读取通常比 CSV 更快。可用 to_parquet 写入、read_parquet 读取，当前环境由 PyArrow 支持。
+
+5. 问：pbMRQ 是什么？
+答：最近季度财务数据计算的市净率。BP = 1 / pbMRQ；pbMRQ 为空、为 0 或为负时必须让 BP 为缺失值。
+
+6. 问：data/raw/prices 这几个路径部分有什么用？
+答：分别表示总数据目录、原始数据目录、个股价格目录。使用 os.path.join 拼接，并用 os.makedirs(..., exist_ok=True) 创建目录。
+
+7. 问：filename = code.replace(".", "_") + ".parquet" 在做什么？
+答：把 sh.600000 变成 sh_600000，再变成 sh_600000.parquet，作为这只股票稳定的文件名。
+
+8. 问：重复运行脚本会覆盖原来的 Parquet 吗？
+答：相同 output_path 会覆盖。但覆盖前应检查 Baostock error_code 和空数据；批量下载可使用临时文件写入后再 os.replace。
+
+9. 问：已经每只股票一个文件，还需要去重吗？
+答：仍建议用 df.drop_duplicates(["date", "code"])。ignore_index=True 只重置行号，不会删除重复数据；去重可防止文件重复读取或后续多版本合并。
+
+10. 问：tradestatus 和 isST 为什么不直接放进普通 numeric_cols？
+答：它们表示交易状态和 ST 状态，不是连续数值。可以统一转成数值后再指定 Int64，以保留 0、1 和缺失值的区别。
+
+11. 问：为什么 Baostock 字段全变成字符串？
+答：接口返回的是文本。原始数据可保留字符串，但清洗阶段必须把价格、成交量、财务字段转成数值，否则无法计算收益率和因子。
+
+12. 问：分层前需要保留哪些字段？
+答：至少保留 date、code、复权价格、成交状态、isST、pbMRQ，以及清洗后生成的 BP、MOM20、VOL60 和未来收益。
+
+—— 以下为与小布（WorkBuddy）的问答补充 ——
+
+13. 问：为什么 rs.error_code 和 rs.get_row_data() 会被 Pylance 标红？
+答：baostock 0.9.4 的 security/history.py 第 67 行有一处裸 return（漏写返回值），静态分析把 query_history_k_data_plus 的返回类型推断成 ResultData | None，访问属性时就报“可能为 None”。运行时正常，因为只有日期格式非法才会走到那条分支。在循环前加 assert rs is not None 即可消除，不要去改 site-packages。
+
+14. 问：最新版 baostock 修复这个问题了吗？
+答：没有。0.9.4 就是当前最新版（2026-09-21 发布），该行原样存在；回溯 0.9.3、0.8.9、0.7.5、0.6.2 全都有，属于长期写法。上游没有类型注解、也不影响实际运行，不要指望优先修。
+
+15. 问：fields 里把 date 写成 data 会怎样？
+答：服务端返回非 0 的 error_code，while 循环不执行，静默得到空表，不报错。字段名必须写 date，open/high/low/close/volume/amount/turn/pctChg/peTTM 等才是合法字段。
+
+16. 问：我的 DataFrame 显示 dtype 是 str，教程里是 object，为什么？
+答：pandas 3.0 起字符串列默认使用 StringDtype，显示为 str；教程是 pandas 2.x，当时字符串只能塞进 object 数组。值本身没变（元素仍是 str）。另外 pandas 3 把时间精度从 datetime64[ns] 改成 datetime64[us]；判断字符串列要用 is_string_dtype，不能用 dtype == object。
+
+17. 问：hs300.loc(10) 为什么标红？
+答：loc 是索引器属性，不是方法，不能用圆括号调用。写 hs300.loc[10] 或 hs300.iloc[10]；原写法运行时抛 TypeError: '_LocIndexer' object is not callable。
+
+18. 问：pd.read_csv("D:\try_pandas.txt") 报 OSError: [Errno 22] 怎么办？
+答：\t 是转义字符（制表符），路径实际变成了 D: 加 TAB 加 ry_pandas.txt。Windows 路径一律用 r"D:\..." 或正斜杠 D:/...，不要裸写反斜杠。
+
+19. 问：改成 "D://try_pandas.txt" 为什么报 ImportError: Import fsspec failed？
+答：pandas 把 xxx:// 识别成“协议://地址”，把 D 当成协议名，转交 fsspec 打开。正斜杠不是转义字符，不需要双写，写成 D:/try_pandas.txt。
+
+20. 问：TAB 分隔的 txt 用 read_csv 读出来只有一列怎么办？
+答：read_csv 默认按逗号分列，要显式写 sep="\t"。
+
+21. 问：print(try_pandas.iloc[0:2, columns.get_loc(openai)] 为什么报错？
+答：两处问题：print( 的右括号未闭合（SyntaxError）；列名必须加引号，get_loc(openai) 会被当成变量名（reportUndefinedVariable）。正确写法是 get_loc("openai")。
+
+22. 问：df.loc[df[0] > 1] 为什么报 KeyError: 0？
+答：方括号里给整数，pandas 找的是“列名为 0 的列”，不是第 0 行，没有这一列就报 KeyError。即便改成正确列名，字符串列与整数比较还会抛 TypeError: Invalid comparison between dtype=str and int，需要先 pd.to_numeric(..., errors="coerce")。
+
+23. 问：想按行 index 取某一行，应该怎么写？
+答：df.loc[0] 按标签、df.iloc[0] 按位置、df.loc[[0]] 保持 DataFrame 形状。df[0] 永远是按列名找列，只有 df[0:1] 这种切片才是切行，这是 pandas 方括号的歧义。
+
+24. 问：rs.error_code == 0（整数 0）会怎样？
+答：baostock 返回的 error_code 是字符串 "0"，而 "0" == 0 恒为 False，循环一次都不执行，静默返回空表，连报错都没有（实测输出 Series([], Name: code)）。这是最危险的错误类型。
+
+25. 问：目录名写成 "data(11/6try)" 会出什么问题？
+答：斜杠是路径分隔符，os.path.join 会把它拆成 data(11 和 6try) 两层目录，Path("data(11/6try)") 同样会拆。pathlib 也救不了，目录名里不要出现斜杠或反斜杠。
+
+26. 问：code_df.to_csv(output_dir) 传目录会怎样？
+答：pandas 把目录名当成文件名处理：目录不存在时不报错，静默创建一个无扩展名文件；目录存在时抛 PermissionError: [Errno 13]。必须给完整文件名，并加 index=False、encoding="utf-8-sig"（中文列名在 Excel 里不乱码）。
+
+27. 问：反复运行脚本，to_parquet / to_csv 会覆盖还是续写？
+答：都覆盖（等价 mode="w"），不会堆重复行。csv 可追加，需 mode="a" 且 header=False；parquet 不支持追加（文件尾有 footer 元数据），传 mode 或 append 会直接 TypeError，只能分片存储或读旧表 concat 后整体重写。
+
+28. 问：覆盖写有什么风险？
+答：pandas 直接写目标路径，中途中断会留下半截文件，parquet 的 footer 不完整会让 read_parquet 直接抛异常。建议先写临时文件再 os.replace 原子替换。另外文件级覆盖不等于目录清理，股票池缩小后旧文件会残留，需要先清理目录。
+
+29. 问：df["code"].astype("string") 在做什么？
+答：转成 pandas 的可空字符串类型 StringDtype。pandas 3 下该列默认已是 str，这行基本冗余，差别只在缺失值表示（str 用 nan，string 用 <NA>）。<NA> 参与比较会返回 <NA> 而不是 False，做布尔索引时要留意。
+
+30. 问：链式 drop_duplicates / sort_values / reset_index 在做什么？
+答：按 (date, code) 去重、按 code 分组后按日期排序、重置索引。keep="last" 保留的是当前行顺序里的最后一条，不是“最新版本”，依赖 concat 的文件顺序，需要确定性时应先按可信度排序再去重。reset_index 必须带 drop=True，否则多出一列 index。
+
+31. 问：sorted(dir.glob("*.parquet")) 加列表推导再加 pd.concat 在做什么？
+答：读目录下所有 parquet 拼成一张长表。sorted 保证顺序稳定可复现（glob 本身返回惰性迭代器，顺序由文件系统决定）；concat 必须加 ignore_index=True，否则索引变成 [0,1,0,1]，df.loc[0] 会一次返回两行。files 为空时 pd.concat([]) 抛 ValueError: No objects to concatenate。
+
+32. 问：os.path.abspath 和 os.path.dirname 分别有什么用？
+答：abspath 按当前工作目录把相对路径补成绝对路径并解析 ..；dirname 取父目录，纯字符串操作。abspath 依据的是 cwd 而不是脚本位置，要拿脚本目录应用 dirname(abspath(__file__))；dirname("a.csv") 返回空字符串，不是 "."。
+
+33. 问：pathlib 有什么用，和 os.path 比有什么好处？
+答：Path 把路径封装成对象：用 / 拼路径，.name/.stem/.suffix/.parent/.with_suffix 拆解，mkdir/iterdir/glob/rglob 操作目录，read_text/write_text 读写小文件。pandas 的 read_csv/to_parquet 直接接受 Path 对象。新代码建议用 pathlib。
+
+34. 问：为什么 os.path 和 pathlib 都不用先创建对象就能用？
+答：Python 的模块本身就是对象，import 时解释器已经实例化并缓存在 sys.modules，os 和 os.path 都是 module 实例；dirname、makedirs 是模块级纯函数，不依赖实例状态。pathlib 的 Path("a/b") 其实就是在构造 WindowsPath 实例，只是不需要任何前置配置，看起来像函数调用。
