@@ -22,7 +22,8 @@ rs=bs.query_hs300_stocks()
 code_df=rs_to_df(rs)
 test_codes = code_df["code"].tolist()
 #拼路径
-project_dir=os.path.dirname(os.path.abspath(__file__))
+code_dir=os.path.dirname(os.path.abspath(__file__))
+project_dir=os.path.dirname(code_dir)
 output_dir=os.path.join(project_dir,"data","raw","prices")
 os.makedirs(output_dir,exist_ok=True)
 #下载hs300全量票
@@ -49,7 +50,8 @@ for i, code in enumerate(test_codes, start=1):
     k_df.to_parquet(output_path, index=False)
     print(f"[{i}/300] 已保存 {code}: {len(k_df)} 行")
     
-project_dir=os.path.dirname(os.path.abspath(__file__))
+code_dir=os.path.dirname(os.path.abspath(__file__))
+project_dir=os.path.dirname(code_dir)
 output_dir=os.path.join(project_dir,"data","raw")  
 os.makedirs(output_dir, exist_ok=True)
 code_df.to_csv(os.path.join(output_dir, "hs300_members_20261107.csv"),

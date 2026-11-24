@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 #清洗
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(__file__).resolve().parents[1]
 processed_dir = project_dir /"data"/"processed"
 processed_dir.mkdir(parents=True, exist_ok=True)
 raw_dir = project_dir / "data" / "raw" / "prices"

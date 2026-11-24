@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(__file__).resolve().parents[1]
 input_path = project_dir / "data" / "processed" / "factors_daily.parquet"
 output_path = project_dir / "data" / "processed" / "factors_standardized.parquet"
 

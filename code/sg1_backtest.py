@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 # 1. 路径
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(__file__).resolve().parents[1]
 input_path = (
     project_dir / "data" / "processed" / "factors_standardized.parquet"
 )
