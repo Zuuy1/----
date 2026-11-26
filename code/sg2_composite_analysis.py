@@ -457,3 +457,50 @@ print(factor_correlation.round(4).to_string(index=False))
 
 print("\n绩效汇总")
 print(performance.round(4).to_string(index=False))
+
+'''sg1 把 IC 分析、分层回测、绩效计算分别写在三个文件里；这个文件把三件事合并，并且多了一个新因子 COMPOSITE。
+
+逐段看它在干什么
+第 22–26 行 directions — 整个文件最关键的一行设定
+
+python
+
+directions = {"BP": 1.0, "MOM20": -1.0, "VOL60": -1.0}
+它给每个因子标符号（+1 表示值越大越该买，−1 表示越小越该买）。依据就是你之前跑出来的 IC：BP 是 +0.022，MOM20 是 −0.014，VOL60 是 −0.027。但请注意注释里的那句话：“这是基于样本内 IC 的方向选择”——等于提前用了未来信息，后面第三个问题会展开。
+
+第 28–33 行 factors 字典 — 一个设计上的好细节
+
+python
+
+factors = {"BP": "BP_Z", "MOM20": "MOM20_Z", "VOL60": "VOL60_Z", "COMPOSITE": "COMPOSITE_Z"}
+把 COMPOSITE 塞进同一个字典后，后面所有 for factor_name, factor_column in factors.items() 的循环都不需要改一行，会自动把合成分当成第四个因子跑完 IC、分层、绩效。写“多因子统一流水线”时，这种映射表是最省事的写法。
+
+第 80–84 行 —— 合成分到底怎么算出来的
+
+python
+
+df["COMPOSITE_Z"] = df["BP_Z"]*1.0 + df["MOM20_Z"]*(-1.0) + df["VOL60_Z"]*(-1.0)
+计算原理，落到数值上：
+
+sg1_standardize.py 里已经对每个交易日、每个因子做了横截面 robust z-score。所以到这一步，三个 _Z 列在每一天都已经是“当天均值≈0、标准差≈1”的同一个量纲。
+正因为量纲统一，三个数直接相加 = 等权，每个因子各占 1/3 的话语权。这一步如果跳过标准化，turn（换手率 0~30）会把 BP（0.0x 量级）完全压死，合成分就退化成单一因子。
+乘 −1 是“方向对齐”：把“越小越好”翻成“越大越好”，让四个因子的语义统一。这个操作叫 direction alignment。
+为什么用 + 而不是 .sum(axis=1) —— 这是个有意的选择。+ 遇到 NaN 就是 NaN（严格），.sum() 默认 skipna=True 会把缺失当 0（宽松）。注释写“任一因子缺失时，合成分也为缺失值”，就是故意选严格模式：不会把“只有 BP 有值”的股票当成合成分有效。代价是样本从 BP 的 1454 天掉到 1394 天——VOL60 需要 60 个交易日预热，2020 年只剩 183 天。这个取舍是对的。
+
+第 38–59 行 robust_daily_rank_ic — 一天一次的 IC
+
+先剔除因子、next_ret、当日和次日 tradestatus 有缺失的行，再只保留 tradestatus==1 & next_tradestatus==1（今天能买、明天能卖，否则算出来的收益是停牌复牌跳空，是假收益）。样本不足 30 只返回 NaN，否则算 Spearman 秩相关。
+
+用秩相关不用 Pearson 的原因你之前已经见过：next_ret 的右尾很肥（最大 +29%），Pearson 会被几个极端值带着走。
+
+第 178–217 行 — 因子相关性，这段容易被忽略但很重要
+
+用 combinations 取三对，每天算一次、再对 1395 天求均值。合成因子的效果完全取决于成员之间不重复——如果三个因子讲的是同一件事，合成等于没合成。要看的就是这段。
+
+第 220–294 行 — 分层
+
+每天按因子值 rank(method="first") 再 qcut(q=5)。先 rank 是因为 qcut 遇到大量重复值（比如 PB 相同的股票）会切不均匀甚至报错。observed=True 是防止空组变成一行 NaN。每层记 next_ret 的均值和只数，pivot 成宽表后加 LS = G5 - G1。
+
+第 297–367 行 — 绩效 + 年度复合
+
+nav=cumprod，年化收益 nav[-1]**(252/n)-1，年化波动 std(ddof=1)*sqrt(252)，Sharpe mean/std*sqrt(252)，回撤 min(nav/cummax-1)。年度那段用 compound_return（prod(1+r)-1），注意这里不能用“日均收益×天数”近似，复利和加法的差别一年下来能有几个点。'''
